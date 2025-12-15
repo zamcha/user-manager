@@ -1,10 +1,10 @@
 spring:
-  rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
-    virtual-host: "/"
+#  rabbitmq:
+#    host: localhost
+#    port: 5672
+#    username: guest
+#    password: guest
+#    virtual-host: "/"
   application:
     name: user-manager
   security:
@@ -43,9 +43,10 @@ spring:
 
 server:
   port: 8001
+  forward-headers-strategy: framework
 
-queue:
-  notification:
-    queue: notification-queue
-    exchange: notification-exchange
-    routing-key: notification-routing-key
+#queue:
+#  notification:
+#    queue: notification-queue
+#    exchange: notification-exchange
+#    routing-key: notification-routing-key
