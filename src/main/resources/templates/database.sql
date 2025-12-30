@@ -50,3 +50,19 @@ INSERT INTO roles (name, description) VALUES
                                           ('ROLE_USER', 'Khách hàng mua sắm'),
                                           ('ROLE_MANAGER', 'Quản lý kho và đơn hàng'),
                                           ('ROLE_ADMIN', 'Quản trị hệ thống cao nhất');
+-- 5. Bảng VERIFICATION_TOKENS (Lưu token kích hoạt & quên mật khẩu)
+CREATE TABLE verification_tokens (
+                                     id BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+                                     token VARCHAR(255) NOT NULL,
+                                     type VARCHAR(50) NOT NULL, -- 'REGISTER' hoặc 'RESET_PASSWORD'
+                                     expiry_date TIMESTAMP NOT NULL,
+
+                                     user_id CHAR(36) NOT NULL,
+
+    -- Index để tìm token cho nhanh
+                                     UNIQUE INDEX idx_verify_token (token),
+
+    -- Khóa ngoại liên kết với bảng users
+                                     CONSTRAINT fk_verify_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

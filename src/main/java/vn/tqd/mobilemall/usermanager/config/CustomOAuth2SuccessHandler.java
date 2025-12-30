@@ -8,6 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.savedrequest.RequestCache;
+import org.springframework.security.web.savedrequest.SavedRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import vn.tqd.mobilemall.usermanager.entity.ERole;
@@ -30,6 +33,7 @@ public class CustomOAuth2SuccessHandler implements AuthenticationSuccessHandler 
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final RequestCache requestCache = new HttpSessionRequestCache();
     // private final JwtUtils jwtUtils; // Nếu muốn sinh token
 
     @Override
@@ -49,8 +53,20 @@ public class CustomOAuth2SuccessHandler implements AuthenticationSuccessHandler 
         // --- Logic sinh Token và Redirect (Giữ nguyên) ---
         // String token = jwtUtils.generateTokenFromUser(user);
 
-        response.sendRedirect("http://localhost:8888/user-manager/swagger-ui/index.html");
-        // Hoặc: response.sendRedirect("http://localhost:3000?token=" + token);
+        // 2. Kiểm tra xem trước khi login, user có đang muốn đi đâu không?
+        // (Ví dụ: Đang muốn vào /oauth2/authorize để xin quyền)
+        SavedRequest savedRequest = requestCache.getRequest(request, response);
+
+        if (savedRequest != null) {
+            // Nếu có link cũ, ưu tiên quay lại đó (để hiện Consent Screen)
+            String targetUrl = savedRequest.getRedirectUrl();
+            log.info("Redirecting to saved request: {}", targetUrl);
+            response.sendRedirect(targetUrl);
+        } else {
+            // Nếu không có (Login chủ động), thì về trang chủ React
+            log.info("No saved request, redirecting to Home");
+            response.sendRedirect("http://localhost:5173/");
+        }
     }
 
     @Transactional

@@ -1,10 +1,10 @@
 spring:
-#  rabbitmq:
-#    host: localhost
-#    port: 5672
-#    username: guest
-#    password: guest
-#    virtual-host: "/"
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: "/"
   application:
     name: user-manager
   security:
@@ -45,8 +45,8 @@ server:
   port: 8001
   forward-headers-strategy: framework
 
-#queue:
-#  notification:
-#    queue: notification-queue
-#    exchange: notification-exchange
-#    routing-key: notification-routing-key
+queue:
+  notification:
+    queue: notification-email1-queue       # Tên hàng đợi
+    exchange: notification-email1-exchange # Tên bưu điện
+    routing-key: notification-email1-key   # Mã định tuyến

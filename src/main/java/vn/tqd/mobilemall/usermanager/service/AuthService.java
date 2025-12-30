@@ -9,5 +9,8 @@ public interface AuthService {
     void registerUser(RegisterRequest request);
 
     JWTResponse login(LoginRequest request);
+    void verifyAccount(String token);
+    void resetPassword(String token, String newPassword);
+    void forgotPassword(String email);
 
 }
