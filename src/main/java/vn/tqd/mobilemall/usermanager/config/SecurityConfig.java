@@ -4,6 +4,8 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -16,10 +18,13 @@ import com.nimbusds.jose.proc.SecurityContext;
 
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
@@ -30,6 +35,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -37,6 +43,7 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
@@ -46,8 +53,10 @@ import org.springframework.security.oauth2.server.authorization.config.annotatio
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -61,31 +70,25 @@ import vn.tqd.mobilemall.usermanager.service.impl.UserDetailsServiceImpl;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
 @RequiredArgsConstructor
+@EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
-
+    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
+    private String issuerUri;
     // Inject Handler xử lý sau khi Google Login thành công
     private final AuthenticationSuccessHandler customOAuth2SuccessHandler;
     private final UserDetailsServiceImpl userDetailsService;
 
-    // Bean 1: Dành cho Authorization Server (Cấp Token) - GIỮ NGUYÊN
+    // Bean 1: Dành cho Authorization Server (Cấp Token)
     @Bean
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
             throws Exception {
         OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
                 OAuth2AuthorizationServerConfigurer.authorizationServer();
-//
-//        http.cors(c -> c.configurationSource(request -> {
-//            CorsConfiguration corsConfiguration = new CorsConfiguration();
-//            corsConfiguration.addAllowedOrigin("*");
-//            corsConfiguration.addAllowedHeader("*");
-//            corsConfiguration.addAllowedMethod("*");
-//            return corsConfiguration;
-//        }));
         http
                 .cors(cors -> cors.disable())
+//                .csrf(csrf -> csrf.disable())
                 .securityMatcher(authorizationServerConfigurer.getEndpointsMatcher())
                 .with(authorizationServerConfigurer, (authorizationServer) ->
                         authorizationServer
@@ -105,19 +108,11 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // Bean 2: Dành cho App Security (Login form, Google Login) - ĐÃ SỬA
+    // Bean 2: Dành cho App Security (Login form, Google Login)
     @Bean
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http)
             throws Exception {
-//        http.cors(c -> c.configurationSource(request -> {
-//            CorsConfiguration corsConfiguration = new CorsConfiguration();
-//            corsConfiguration.addAllowedOrigin("*");
-//            corsConfiguration.addAllowedHeader("*");
-//            corsConfiguration.addAllowedMethod("*");
-//            return corsConfiguration;
-//        }));
-
         http
                 .cors(cors -> cors.disable())
                 .csrf(CsrfConfigurer::disable)
@@ -127,6 +122,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/reset-password",
                                 "/api/v1/auth/verify-account").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )
 //                .logout(logout -> logout
@@ -143,23 +139,30 @@ public class SecurityConfig {
 //                        })
 //                        .permitAll()
 //                )
-                // 1. Đăng nhập bằng Form (Username/Password) cũ
-                .formLogin(Customizer.withDefaults())
-
-                // 2. THÊM MỚI: Đăng nhập bằng Google
-                .oauth2Login(oauth2 -> oauth2
-                        // Khi Google login thành công thì chạy vào handler này
-                        .successHandler(customOAuth2SuccessHandler)
+                // Cấu hình đóng vai trò là Resource Server để xác thực JWT Token từ Header
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                 )
+                // 1. Đăng nhập bằng Form
+                .formLogin(form -> form
+                        .loginPage("/login")       // chỉ định trang login custom
+                        .permitAll()               // cho phép ai cũng truy cập
+                )
+                .oauth2Login(oauth2 -> oauth2
+                        .loginPage("/login")
+                        .successHandler(customOAuth2SuccessHandler) //
+                )
+        // 2. THÊM MỚI: Đăng nhập bằng Google
+//                .oauth2Login(oauth2 -> oauth2
+//                        // Khi Google login thành công thì chạy vào handler này
+//                        .successHandler(customOAuth2SuccessHandler)
+//                )
                 .logout(logout -> logout
                         .logoutUrl("/logout") // Endpoint logout mặc định
                         .logoutSuccessHandler((request, response, authentication) -> {
-                            // Xóa session
-                            request.getSession().invalidate();
-
-                            // Quan trọng: Redirect về lại trang Login của Frontend
-                            // Do bạn chạy qua Gateway nên set cứng localhost:5173 cho chắc
-                            response.sendRedirect("http://localhost:5173/login");
+//                            // Xóa session
+//                            request.getSession().invalidate();
+                            response.sendRedirect("http://localhost:5173/");
                         })
 //                        .deleteCookies("JSESSIONID") // Xóa sạch Cookie phiên làm việc
                         .permitAll()
@@ -191,11 +194,11 @@ public class SecurityConfig {
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 // Các Redirect URI cũ của bạn
                 .redirectUri("http://127.0.0.1:8080/login/oauth2/code/oidc-client")
-                .redirectUri("http://localhost:8002/swagger-ui/oauth2-redirect.html")
-                .redirectUri("http://192.168.80.1:8888/user-manager/swagger-ui/oauth2-redirect.html")
                 .redirectUri("http://localhost:8888/user-manager/swagger-ui/oauth2-redirect.html")
                 .redirectUri("http://localhost:8888/mall-service/swagger-ui/oauth2-redirect.html")
+                .redirectUri("http://api-gateway:8888/mall-service/swagger-ui/oauth2-redirect.html")
                 .redirectUri("http://localhost:8888/notification-service/swagger-ui/oauth2-redirect.html")
+                .redirectUri("http://localhost:8888/shipment-service/swagger-ui/oauth2-redirect.html")
                 .postLogoutRedirectUri("http://127.0.0.1:8080/")
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
@@ -205,29 +208,42 @@ public class SecurityConfig {
         // -----------------------------------------------------------
         // 2. Client Mới (Dành riêng cho React Frontend)
         //    KHÔNG CÓ Secret, dùng PKCE
-        // -----------------------------------------------------------
         RegisteredClient reactClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("react-client") // <-- Dùng ID này trong code React
-                // KHÔNG set clientSecret ở đây
+                .clientId("react-client")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE) // Public Client
 
-                // QUAN TRỌNG: Cho phép Public Client (không cần mật khẩu)
-                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
-
+                // 1. CÁC LOẠI QUYỀN (Grant Types)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN) // <-- Đã bật chức năng
 
-                // Redirect về React App (Port 3000)
+                // 2. REDIRECT URI
                 .redirectUri("http://localhost:5173")
-                .redirectUri("http://localhost:5173/") // Thêm cái này cho chắc chắn tùy browser
+                .redirectUri("http://localhost:5173/")
                 .postLogoutRedirectUri("http://localhost:5173")
 
+                // 3. SCOPES
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
+                .scope("offline_access") // <-- THÊM CÁI NÀY: Chuẩn OIDC để xin Refresh Token
 
+                // 4. CLIENT SETTINGS (PKCE)
                 .clientSettings(ClientSettings.builder()
-                        .requireAuthorizationConsent(true) // Hỏi user "Có đồng ý cho app React truy cập không?"
-                        .requireProofKey(true) // <-- BẮT BUỘC: Bật PKCE để bảo mật cho React
+                        .requireAuthorizationConsent(true)
+                        .requireProofKey(true)
                         .build())
+
+                // 5. TOKEN SETTINGS (QUAN TRỌNG NHẤT ĐỂ SỬA LỖI 5 PHÚT)
+                .tokenSettings(TokenSettings.builder()
+                        // Access Token sống 30 phút (đủ lâu để user lướt web thoải mái)
+                        .accessTokenTimeToLive(Duration.ofMinutes(30))
+
+                        // Refresh Token sống 24 giờ (để tính năng "Duy trì đăng nhập" hoạt động)
+                        .refreshTokenTimeToLive(Duration.ofHours(24))
+
+                        // Cho phép dùng lại Refresh Token (Tùy chọn, nên bật cho React đỡ phức tạp)
+                        .reuseRefreshTokens(true)
+                        .build())
+
                 .build();
 
         // Trả về cả 2 client
@@ -264,11 +280,23 @@ public class SecurityConfig {
     public JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
         return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
     }
-
+    private Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            List<String> roles = jwt.getClaimAsStringList("roles");
+            if (roles == null) return List.of();
+            return roles.stream()
+                    .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
+                    .map(SimpleGrantedAuthority::new)
+                    .collect(Collectors.toList());
+        });
+        return converter;
+    }
     @Bean
     public AuthorizationServerSettings authorizationServerSettings() {
-        return AuthorizationServerSettings.builder().build();
+        return AuthorizationServerSettings.builder().issuer(issuerUri).build();
     }
+
 
     // Cấu hình DaoAuthenticationProvider để Spring biết dùng Service nào check pass
     @Bean

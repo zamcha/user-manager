@@ -5,7 +5,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
@@ -19,12 +23,11 @@ import vn.tqd.mobilemall.usermanager.entity.User;
 import vn.tqd.mobilemall.usermanager.repository.RoleRepository;
 import vn.tqd.mobilemall.usermanager.repository.UserRepository;
 import vn.tqd.mobilemall.usermanager.service.AuthService;
+import vn.tqd.mobilemall.usermanager.service.impl.UserDetailsImpl;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor // Lombok tự inject AuthService
@@ -49,7 +52,19 @@ public class CustomOAuth2SuccessHandler implements AuthenticationSuccessHandler 
 
         // 👇 GỌI SERVICE ĐỂ XỬ LÝ DB (Ngắn gọn, sạch sẽ)
         User user = processOAuthPostLogin(email, name, avatarUrl, googleId);
+        // Lấy roles từ DB
+        List<GrantedAuthority> authorities = user.getRoles().stream()
+                .map(role -> new SimpleGrantedAuthority(role.getName().name()))
+                .collect(Collectors.toList());
 
+        // Tạo UserDetailsImpl
+        UserDetailsImpl userDetails = UserDetailsImpl.build(user);
+
+        // Gắn lại Authentication với roles từ DB
+        Authentication newAuth = new UsernamePasswordAuthenticationToken(
+                userDetails, null, authorities
+        );
+        SecurityContextHolder.getContext().setAuthentication(newAuth);
         // --- Logic sinh Token và Redirect (Giữ nguyên) ---
         // String token = jwtUtils.generateTokenFromUser(user);
 

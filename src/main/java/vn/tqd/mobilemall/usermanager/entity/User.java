@@ -20,7 +20,8 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class User {
+public class User implements java.io.Serializable{
+    private static final long serialVersionUID = 1L;
 
     @Id
     @Column(length = 36, nullable = false, updatable = false)

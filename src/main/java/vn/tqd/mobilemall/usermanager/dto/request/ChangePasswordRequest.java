@@ -5,7 +5,8 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
-public class ChangePasswordRequest {
+public class ChangePasswordRequest implements java.io.Serializable{
+    private static final long serialVersionUID = 1L;
     @NotBlank(message = "Mật khẩu cũ không được để trống")
     private String oldPassword;
 

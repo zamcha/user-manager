@@ -9,6 +9,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import vn.tqd.mobilemall.usermanager.entity.User;
 
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -16,7 +17,6 @@ import java.util.stream.Collectors;
 @Data
 @AllArgsConstructor // Lombok sẽ tự sinh Constructor chứa tất cả các fields (gồm cả isActive mới thêm)
 public class UserDetailsImpl implements UserDetails {
-    private static final long serialVersionUID = 1L;
 
     private String id;
     private String email;

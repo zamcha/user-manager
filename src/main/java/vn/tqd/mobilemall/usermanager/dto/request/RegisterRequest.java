@@ -7,7 +7,8 @@ import lombok.Data;
 import java.util.Set;
 
 @Data
-public class RegisterRequest {
+public class RegisterRequest implements java.io.Serializable{
+    private static final long serialVersionUID = 1L;
     @NotBlank(message = "Email không được để trống")
     @Email(message = "Email không đúng định dạng")
     private String email;

@@ -1,0 +1,29 @@
+# Maven build output
+target/
+*.jar
+*.war
+*.ear
+
+# IntelliJ IDEA project files
+.idea/
+*.iml
+out/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Node.js (nếu có frontend trong project)
+node_modules/
+dist/
+
+# Docker
+Dockerfile
+docker-compose.yml

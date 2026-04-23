@@ -9,7 +9,8 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class NotificationRequest {
+public class NotificationRequest implements java.io.Serializable{
+    private static final long serialVersionUID = 1L;
     private String userId;   // Có thể null nếu gửi mail kích hoạt (chưa có userId)
     private String email;
     private String title;
